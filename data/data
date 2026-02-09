@@ -1,0 +1,5 @@
+ref_data.csv
+scaled features used as reference for drift detection. It contains the scaled features + labels.
+
+prod_data.csv
+stores feedback samples from webapp predictions.
