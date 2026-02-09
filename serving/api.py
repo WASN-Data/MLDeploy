@@ -239,17 +239,31 @@ async def predict(file: UploadFile = File(...)):
         X_scaled = scaler.transform(X)
         
         # Predict
-        prediction = model.predict(X_scaled)[0]
-        probabilities = model.predict_proba(X_scaled)[0]
+        prediction_idx = model.predict(X_scaled)[0]
         
-        # Create probability dict
-        prob_dict = {genre: float(prob) for genre, prob in zip(GENRE_LABELS, probabilities)}
+        # Convert prediction index to genre string first
+        if isinstance(prediction_idx, (int, np.integer)):
+            genre_predicted = GENRE_LABELS[int(prediction_idx)]
+        else:
+            genre_predicted = str(prediction_idx)
         
-        # Get confidence (max probability)
-        confidence = float(max(probabilities))
+        # Get probabilities if available (SVC needs probability=True)
+        if hasattr(model, 'predict_proba'):
+            try:
+                probabilities = model.predict_proba(X_scaled)[0]
+                prob_dict = {genre: float(prob) for genre, prob in zip(GENRE_LABELS, probabilities)}
+                confidence = float(max(probabilities))
+            except Exception:
+                # Model's predict_proba failed - use prediction only
+                prob_dict = {genre: (1.0 if genre == genre_predicted else 0.0) for genre in GENRE_LABELS}
+                confidence = 1.0
+        else:
+            # Model doesn't have predict_proba - use prediction only
+            prob_dict = {genre: (1.0 if genre == genre_predicted else 0.0) for genre in GENRE_LABELS}
+            confidence = 1.0
         
         return PredictionResponse(
-            genre=prediction,
+            genre=genre_predicted,
             confidence=confidence,
             probabilities=prob_dict
         )
