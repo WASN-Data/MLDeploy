@@ -13,6 +13,12 @@ import tempfile
 from typing import Optional
 import numpy as np
 import pandas as pd
+import scipy
+import scipy.signal.windows as windows
+if not hasattr(scipy.signal, 'hann'):
+    scipy.signal.hann = windows.hann
+if not hasattr(scipy.signal, 'hamming'):
+    scipy.signal.hamming = windows.hamming
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -42,7 +48,7 @@ FEATURE_COLUMNS = [
 ]
 
 GENRE_LABELS = ['blues', 'classical', 'country', 'disco', 'hiphop', 
-                'jazz', 'metal', 'pop', 'reggae', 'rock']
+                'jazz', 'metal', 'pop', 'rock']
 
 # ============================================================================
 # GLOBAL MODEL VARIABLES (loaded at startup)
