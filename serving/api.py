@@ -354,9 +354,11 @@ async def feedback(
 def retrain_model():
     """
     Retrain model using reference and production data.
+    Saves versioned checkpoints so you don't lose previous iterations.
     Returns the newly trained model.
     """
     from sklearn.ensemble import RandomForestClassifier
+    from datetime import datetime
     
     ref_data_path = os.path.join(DATA_DIR, "ref_data.csv")
     prod_data_path = os.path.join(DATA_DIR, "prod_data.csv")
@@ -389,12 +391,41 @@ def retrain_model():
     )
     new_model.fit(X, y)
     
-    # Save updated model
+    # ===== MODEL VERSIONING =====
+    # Create checkpoints directory
+    checkpoints_dir = os.path.join(ARTIFACTS_DIR, "checkpoints")
+    os.makedirs(checkpoints_dir, exist_ok=True)
+    
+    # Save versioned checkpoint with timestamp and sample count
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    n_samples = len(combined_df)
+    n_prod = len(prod_df)
+    checkpoint_name = f"model_v{timestamp}_n{n_samples}_prod{n_prod}.pkl"
+    checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
+    
+    with open(checkpoint_path, "wb") as f:
+        pickle.dump(new_model, f)
+    print(f"✅ Checkpoint saved: {checkpoint_name}")
+    
+    # Save main model (overwrites current)
     model_path = os.path.join(ARTIFACTS_DIR, "model.pkl")
     with open(model_path, "wb") as f:
         pickle.dump(new_model, f)
     
-    print(f"✅ Model retrained and saved!")
+    # Save metadata about this training run
+    metadata = {
+        "timestamp": timestamp,
+        "ref_samples": len(ref_df),
+        "prod_samples": len(prod_df),
+        "total_samples": n_samples,
+        "checkpoint_path": checkpoint_path,
+    }
+    metadata_path = os.path.join(ARTIFACTS_DIR, "training_metadata.json")
+    import json
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"✅ Model retrained and saved! (checkpoint: {checkpoint_name})")
     return new_model
 
 

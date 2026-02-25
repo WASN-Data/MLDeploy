@@ -5,12 +5,20 @@ Features:
 - Waveform visualization
 - Genre prediction with confidence
 - Feedback submission for model retraining
+- Data drift monitoring with Evidently
+- Classification metrics tracking (F1, precision, recall, balanced accuracy)
 """
 
 import streamlit as st
 import requests
 import numpy as np
+import pandas as pd
 import io
+import os
+from sklearn.metrics import (
+    f1_score, precision_score, recall_score, 
+    balanced_accuracy_score, accuracy_score
+)
 
 # ============================================================================
 # CONFIGURATION
@@ -200,40 +208,242 @@ def create_probability_chart(probabilities: dict):
     plt.tight_layout()
     return fig
 
+
+# Feature columns for drift detection
+FEATURE_COLUMNS = [
+    'length', 'chroma_stft_mean', 'chroma_stft_var', 'rms_mean', 'rms_var',
+    'spectral_centroid_mean', 'spectral_centroid_var', 'spectral_bandwidth_mean',
+    'spectral_bandwidth_var', 'rolloff_mean', 'rolloff_var', 'zero_crossing_rate_mean',
+    'zero_crossing_rate_var', 'harmony_mean', 'harmony_var', 'perceptr_mean',
+    'perceptr_var', 'tempo', 'mfcc1_mean', 'mfcc1_var', 'mfcc2_mean', 'mfcc2_var',
+    'mfcc3_mean', 'mfcc3_var', 'mfcc4_mean', 'mfcc4_var', 'mfcc5_mean', 'mfcc5_var',
+    'mfcc6_mean', 'mfcc6_var', 'mfcc7_mean', 'mfcc7_var', 'mfcc8_mean', 'mfcc8_var',
+    'mfcc9_mean', 'mfcc9_var', 'mfcc10_mean', 'mfcc10_var', 'mfcc11_mean', 'mfcc11_var',
+    'mfcc12_mean', 'mfcc12_var', 'mfcc13_mean', 'mfcc13_var', 'mfcc14_mean', 'mfcc14_var',
+    'mfcc15_mean', 'mfcc15_var', 'mfcc16_mean', 'mfcc16_var', 'mfcc17_mean', 'mfcc17_var',
+    'mfcc18_mean', 'mfcc18_var', 'mfcc19_mean', 'mfcc19_var', 'mfcc20_mean', 'mfcc20_var'
+]
+
+
+def load_drift_data(keep_prediction: bool = False):
+    """Load reference and production data for drift analysis."""
+    # In Docker, data is mounted at /data
+    data_dir = "/data" if os.path.exists("/data") else os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    
+    ref_path = os.path.join(data_dir, 'ref_data.csv')
+    prod_path = os.path.join(data_dir, 'prod_data.csv')
+    
+    ref_df = None
+    prod_df = None
+    
+    if os.path.exists(ref_path):
+        ref_df = pd.read_csv(ref_path)
+    
+    if os.path.exists(prod_path):
+        prod_df = pd.read_csv(prod_path)
+        if not keep_prediction and 'prediction' in prod_df.columns:
+            prod_df = prod_df.drop(columns=['prediction'])
+    
+    return ref_df, prod_df
+
+
+def get_classification_metrics_simple(prod_df: pd.DataFrame) -> dict:
+    """Calculate classification metrics from production data."""
+    if prod_df is None or 'prediction' not in prod_df.columns or 'label' not in prod_df.columns:
+        return None
+    
+    from sklearn.metrics import (
+        f1_score, precision_score, recall_score, 
+        balanced_accuracy_score, accuracy_score
+    )
+    
+    y_true = prod_df['label']
+    y_pred = prod_df['prediction']
+    
+    return {
+        'accuracy': accuracy_score(y_true, y_pred),
+        'balanced_accuracy': balanced_accuracy_score(y_true, y_pred),
+        'f1_weighted': f1_score(y_true, y_pred, average='weighted'),
+        'precision_weighted': precision_score(y_true, y_pred, average='weighted'),
+        'recall_weighted': recall_score(y_true, y_pred, average='weighted'),
+        'sample_count': len(prod_df),
+    }
+
+
+def render_drift_page():
+    """Render the data drift monitoring and model health page."""
+    st.header("📊 Model Monitoring Dashboard")
+    
+    st.write("""
+    This page tracks:
+    1. **Data Drift**: When production data differs from training data
+    2. **Model Health**: Classification metrics (F1, precision, recall, balanced accuracy)
+    """)
+    
+    # Load data - need prediction for classification metrics
+    ref_df, prod_df_with_pred = load_drift_data(keep_prediction=True)
+    ref_df, prod_df = load_drift_data(keep_prediction=False)  # For drift analysis
+    
+    if ref_df is None:
+        st.error("❌ Reference data (ref_data.csv) not found!")
+        return
+    
+    st.success(f"✅ Reference data loaded: **{len(ref_df)}** samples")
+    
+    if prod_df is None or len(prod_df) == 0:
+        st.warning("⚠️ No production data yet. Submit some feedback to start monitoring!")
+        st.info("Upload audio files, get predictions, and submit feedback to collect production data.")
+        return
+    
+    st.success(f"✅ Production data loaded: **{len(prod_df)}** samples")
+    
+    # ==================== CLASSIFICATION METRICS ====================
+    st.divider()
+    st.subheader("🎯 Model Health - Classification Metrics")
+    
+    class_metrics = get_classification_metrics_simple(prod_df_with_pred)
+    
+    if class_metrics:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("F1 Score", f"{class_metrics['f1_weighted']:.3f}",
+                      help="Harmonic mean of precision and recall (weighted)")
+        with col2:
+            st.metric("Balanced Accuracy", f"{class_metrics['balanced_accuracy']:.3f}",
+                      help="Average recall across all classes")
+        with col3:
+            st.metric("Precision", f"{class_metrics['precision_weighted']:.3f}",
+                      help="True positives / (true + false positives)")
+        with col4:
+            st.metric("Recall", f"{class_metrics['recall_weighted']:.3f}",
+                      help="True positives / (true + false negatives)")
+        
+        # Show accuracy trend warning if applicable
+        if class_metrics['accuracy'] < 0.7:
+            st.warning(f"⚠️ Model accuracy ({class_metrics['accuracy']:.1%}) is below 70%. Consider retraining.")
+        elif class_metrics['accuracy'] < 0.8:
+            st.info(f"ℹ️ Model accuracy: {class_metrics['accuracy']:.1%}")
+        else:
+            st.success(f"✅ Model accuracy: {class_metrics['accuracy']:.1%}")
+    else:
+        st.info("Classification metrics will appear after feedback is submitted.")
+    
+    # ==================== DATA DRIFT ====================
+    st.divider()
+    
+    # Try to use Evidently if available
+    try:
+        # Evidently 0.7.x imports
+        from evidently import Report, Dataset
+        from evidently.presets import DataDriftPreset, ClassificationPreset
+        
+        # Convert DataFrames to Evidently Datasets
+        ref_dataset = Dataset.from_pandas(ref_df)
+        prod_dataset = Dataset.from_pandas(prod_df)
+        
+        # Quick drift summary
+        st.subheader("🔍 Data Drift Summary")
+        
+        with st.spinner("Analyzing drift..."):
+            drift_report = Report([DataDriftPreset()])
+            drift_report.run(
+                reference_data=ref_dataset,
+                current_data=prod_dataset
+            )
+            
+            # For 0.7.x, we show basic metrics and offer full report
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Reference Samples", len(ref_df))
+            with col2:
+                st.metric("Production Samples", len(prod_df))
+            with col3:
+                st.metric("Features Analyzed", len(FEATURE_COLUMNS))
+        
+        st.divider()
+        
+        # Report generation buttons
+        st.subheader("📈 Detailed Reports")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 Generate Drift Report", type="primary"):
+                with st.spinner("Generating data drift report..."):
+                    full_report = Report([DataDriftPreset()])
+                    full_report.run(
+                        reference_data=ref_dataset,
+                        current_data=prod_dataset
+                    )
+                    report_html = full_report.get_html()
+                    st.components.v1.html(report_html, height=800, scrolling=True)
+        
+        with col2:
+            if 'prediction' in prod_df_with_pred.columns:
+                if st.button("📊 Generate Classification Report", type="secondary"):
+                    with st.spinner("Generating classification report..."):
+                        # Need to rename columns for Evidently classification preset
+                        class_df = prod_df_with_pred.rename(columns={'label': 'target', 'prediction': 'prediction'})
+                        class_dataset = Dataset.from_pandas(class_df, data_definition=None)
+                        class_report = Report([ClassificationPreset()])
+                        class_report.run(current_data=class_dataset)
+                        class_html = class_report.get_html()
+                        st.components.v1.html(class_html, height=800, scrolling=True)
+    
+    except ImportError:
+        st.warning("⚠️ Evidently library not installed. Showing basic statistics instead.")
+        _render_basic_drift_stats(ref_df, prod_df)
+    
+    # Genre Distribution Comparison
+    st.divider()
+    st.subheader("🎵 Genre Distribution Comparison")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Reference Data**")
+        if 'label' in ref_df.columns:
+            ref_counts = ref_df['label'].value_counts()
+            st.bar_chart(ref_counts)
+    
+    with col2:
+        st.write("**Production Data**")
+        if 'label' in prod_df.columns:
+            prod_counts = prod_df['label'].value_counts()
+            st.bar_chart(prod_counts)
+
+
+def _render_basic_drift_stats(ref_df, prod_df):
+    """Render basic drift statistics without Evidently."""
+    st.write("**Feature Statistics Comparison:**")
+    
+    # Calculate mean differences for key features
+    key_features = ['tempo', 'rms_mean', 'spectral_centroid_mean', 'chroma_stft_mean']
+    
+    comparison_data = []
+    for feat in key_features:
+        if feat in ref_df.columns and feat in prod_df.columns:
+            ref_mean = ref_df[feat].mean()
+            prod_mean = prod_df[feat].mean()
+            diff_pct = ((prod_mean - ref_mean) / ref_mean * 100) if ref_mean != 0 else 0
+            comparison_data.append({
+                'Feature': feat,
+                'Reference Mean': f"{ref_mean:.4f}",
+                'Production Mean': f"{prod_mean:.4f}",
+                'Difference': f"{diff_pct:+.1f}%"
+            })
+    
+    if comparison_data:
+        st.dataframe(pd.DataFrame(comparison_data), use_container_width=True)
+
 # ============================================================================
 # MAIN APP
 # ============================================================================
 
-def main():
-    # Header
-    st.markdown('<h1 class="main-header">🎵 Music Genre Classifier</h1>', unsafe_allow_html=True)
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("ℹ️ About")
-        st.write("""
-        This app uses machine learning to classify music into 10 genres:
-        - 🎸 Blues & Rock
-        - 🎻 Classical
-        - 🤠 Country
-        - 🕺 Disco
-        - 🎤 Hip-Hop
-        - 🎷 Jazz
-        - 🤘 Metal
-        - 🎵 Pop
-        - 🌴 Reggae
-        """)
-        
-        st.divider()
-        
-        # API Status
-        st.header("🔌 API Status")
-        if check_api_health():
-            st.success("✅ API Connected")
-        else:
-            st.error("❌ API Unavailable")
-            st.info("Make sure the API container is running:\n`docker compose -f serving/docker-compose.yml up`")
-    
+def render_prediction_page():
+    """Render the main prediction page."""
     # Main content
     col1, col2 = st.columns([1, 1])
     
@@ -308,7 +518,6 @@ def main():
                 st.pyplot(fig)
             except Exception as e:
                 # Fallback to simple bar chart
-                import pandas as pd
                 probs_df = pd.DataFrame({
                     'Genre': list(result['probabilities'].keys()),
                     'Probability': list(result['probabilities'].values())
@@ -356,6 +565,46 @@ def main():
                             st.error(f"Error submitting feedback: {str(e)}")
                 else:
                     st.warning("Please upload an audio file first")
+
+
+def main():
+    # Header
+    st.markdown('<h1 class="main-header">🎵 Music Genre Classifier</h1>', unsafe_allow_html=True)
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("ℹ️ About")
+        st.write("""
+        This app uses machine learning to classify music into 10 genres:
+        - 🎸 Blues & Rock
+        - 🎻 Classical
+        - 🤠 Country
+        - 🕺 Disco
+        - 🎤 Hip-Hop
+        - 🎷 Jazz
+        - 🤘 Metal
+        - 🎵 Pop
+        - 🌴 Reggae
+        """)
+        
+        st.divider()
+        
+        # API Status
+        st.header("🔌 API Status")
+        if check_api_health():
+            st.success("✅ API Connected")
+        else:
+            st.error("❌ API Unavailable")
+            st.info("Make sure the API container is running:\n`docker compose -f serving/docker-compose.yml up`")
+    
+    # Tabs for navigation
+    tab1, tab2 = st.tabs(["🎵 Classify Music", "📊 Data Drift"])
+    
+    with tab1:
+        render_prediction_page()
+    
+    with tab2:
+        render_drift_page()
 
 
 if __name__ == "__main__":
