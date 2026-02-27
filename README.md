@@ -12,7 +12,7 @@ MLDeploy_NoReggae/
 │   ├── model.pkl              # Modèle Gradient Boosting entraîné
 │   ├── scaler.pkl             # StandardScaler pour normalisation
 │   ├── label_encoder.pkl      # Encodeur des labels
-│   ├── feature_names.pkl      # Noms des 57 features
+│   ├── feature_names.pkl      # Noms des 58 features
 │   └── checkpoints/           # Historique des modèles réentraînés
 ├── data/
 │   ├── features_30_sec.csv    # Dataset GTZAN (features pré-extraites)
