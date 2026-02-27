@@ -118,10 +118,10 @@ streamlit run app.py --server.port 8081
 
 ## Contributeurs
 
-Projet réalisé dans le cadre du cours "Concepts & Technologies IA" - Ynov 2025-2026
-Nolan BERGER
-Awa GUEYE SECK
-Wafah LEMAISSI
-Sophie CAPRON
+Projet réalisé dans le cadre du cours "Concepts & Technologies IA" - Ynov 2025-2026  
+Nolan BERGER  
+Awa GUEYE SECK  
+Wafah LEMAISSI  
+Sophie CAPRON  
 
 
