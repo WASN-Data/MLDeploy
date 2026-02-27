@@ -2,11 +2,9 @@
 Step 1: Start Docker Desktop
 
 Step 2: Build and run the API
-cd "c:\Users\sophi\Desktop\Ynov\Cours\Concepts_technos_IA\MLDeploy"
 docker compose -f serving/docker-compose.yml up --build
 
 Step 3: Open a NEW terminal and run the webapp
-cd "c:\Users\sophi\Desktop\Ynov\Cours\Concepts_technos_IA\MLDeploy"
 docker compose -f webapp/docker-compose.yml up --build
 
 Step 4: Access the apps
