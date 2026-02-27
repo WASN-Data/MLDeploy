@@ -52,21 +52,11 @@ MLDeploy_NoReggae/
 ### Option 1 : Docker (Recommandé)
 
 ```bash
-# PowerShell
-cd C:\Users\sophi\Desktop\Ynov\Cours\Concepts_technos_IA\MLDeploy_NoReggae
 
 # Lancer l'API (port 8080)
 docker compose -f serving/docker-compose.yml up --build -d
 
 # Lancer la webapp (port 8081)
-docker compose -f webapp/docker-compose.yml up --build -d
-```
-
-```bash
-# Git Bash (Windows)
-cd /c/Users/sophi/Desktop/Ynov/Cours/Concepts_technos_IA/MLDeploy_NoReggae
-
-docker compose -f serving/docker-compose.yml up --build -d
 docker compose -f webapp/docker-compose.yml up --build -d
 ```
 
