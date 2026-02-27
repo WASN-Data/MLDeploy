@@ -8,8 +8,10 @@ Provides endpoints for:
 
 import os
 import io
+import json
 import pickle
 import tempfile
+from datetime import datetime
 from typing import Optional
 import numpy as np
 import pandas as pd
@@ -28,8 +30,14 @@ import librosa
 # CONFIGURATION
 # ============================================================================
 
-ARTIFACTS_DIR = "/artifacts"
-DATA_DIR = "/data"
+# Auto-detect environment: Docker uses /artifacts, local uses ../artifacts
+if os.path.exists("/artifacts"):
+    ARTIFACTS_DIR = "/artifacts"
+    DATA_DIR = "/data"
+else:
+    ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), "..", "artifacts")
+    DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+
 RETRAIN_THRESHOLD = 10  # Retrain every k feedback samples
 
 # Feature columns (must match training)
@@ -319,7 +327,7 @@ async def feedback(
         
         new_row_df = pd.DataFrame([row_data])
         
-        if os.path.exists(prod_data_path):
+        if os.path.exists(prod_data_path) and os.path.getsize(prod_data_path) > 0:
             prod_df = pd.read_csv(prod_data_path)
             prod_df = pd.concat([prod_df, new_row_df], ignore_index=True)
         else:
@@ -353,7 +361,7 @@ async def feedback(
 def retrain_model():
     """
     Retrain model using reference and production data.
-    Returns the newly trained model.
+    Saves a versioned checkpoint and returns the newly trained model.
     """
     from sklearn.ensemble import RandomForestClassifier
     
@@ -388,12 +396,32 @@ def retrain_model():
     )
     new_model.fit(X, y)
     
+    # Save versioned checkpoint
+    checkpoints_dir = os.path.join(ARTIFACTS_DIR, "checkpoints")
+    os.makedirs(checkpoints_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ckpt_name = f"model_{timestamp}_n{len(combined_df)}_prod{len(prod_df)}.pkl"
+    ckpt_path = os.path.join(checkpoints_dir, ckpt_name)
+    with open(ckpt_path, "wb") as f:
+        pickle.dump(new_model, f)
+    
     # Save updated model
     model_path = os.path.join(ARTIFACTS_DIR, "model.pkl")
     with open(model_path, "wb") as f:
         pickle.dump(new_model, f)
     
-    print(f"✅ Model retrained and saved!")
+    # Save metadata
+    meta = {
+        "timestamp": timestamp,
+        "ref_samples": len(ref_df),
+        "prod_samples": len(prod_df),
+        "total_samples": len(combined_df),
+        "checkpoint": ckpt_name
+    }
+    with open(os.path.join(ARTIFACTS_DIR, "training_metadata.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+    
+    print(f"✅ Model retrained! Checkpoint: {ckpt_name}")
     return new_model
 
 
@@ -411,7 +439,7 @@ async def model_info():
     
     prod_data_path = os.path.join(DATA_DIR, "prod_data.csv")
     feedback_count = 0
-    if os.path.exists(prod_data_path):
+    if os.path.exists(prod_data_path) and os.path.getsize(prod_data_path) > 0:
         feedback_count = len(pd.read_csv(prod_data_path))
     
     return {
