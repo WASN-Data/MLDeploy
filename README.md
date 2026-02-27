@@ -38,12 +38,12 @@ MLDeploy_NoReggae/
 
 ### 🎯 Classification
 - Upload d'un fichier audio (WAV, MP3, FLAC...)
-- Extraction automatique de 57 features GTZAN
+- Extraction automatique de 58 features GTZAN
 - Prédiction avec confiance et top-3 genres
 
 ### 📊 MLOps
 - **Feedback Loop** : Collecte des corrections utilisateur
-- **Retraining automatique** : Réentraînement après N feedbacks
+- **Retraining automatique** : Réentraînement après 10 feedbacks
 - **Checkpoints** : Sauvegarde horodatée de chaque modèle (`model_YYYY-MM-DD_HH-MM-SS.pkl`)
 - **Drift Monitoring** : Détection du data drift avec Evidently
 
@@ -106,7 +106,7 @@ streamlit run app.py --server.port 8081
 **GTZAN Dataset** (modifié - sans reggae) :
 - 900 tracks audio (30 secondes chacun)
 - 9 genres × 100 tracks
-- 57 features audio pré-extraites
+- 58 features audio pré-extraites
 
 ### Features extraites
 - **MFCCs** (1-20) : Caractéristiques timbrales
@@ -119,4 +119,9 @@ streamlit run app.py --server.port 8081
 ## Contributeurs
 
 Projet réalisé dans le cadre du cours "Concepts & Technologies IA" - Ynov 2025-2026
+Nolan BERGER
+Awa GUEYE SECK
+Wafah LEMAISSI
+Sophie CAPRON
+
 
