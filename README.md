@@ -95,7 +95,7 @@ streamlit run app.py --server.port 8081
 
 ## Stack Technique
 
-- **ML** : scikit-learn (Gradient Boosting), librosa
+- **ML** : scikit-learn (Random Forest), librosa
 - **API** : FastAPI, Uvicorn
 - **Frontend** : Streamlit
 - **Monitoring** : Evidently
